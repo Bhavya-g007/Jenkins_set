@@ -91,6 +91,12 @@ pipeline {
             }
         }
     
+        stage('Approval') {
+            steps {
+                input 'Please approve for deployment'
+            }
+        }
+
         stage('Deploy') {
             steps {
                 echo '🚀 Deploying application...'
