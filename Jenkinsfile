@@ -1,25 +1,27 @@
 pipeline {
     agent any
+
+    echo "Running on branch: ${env.BRANCH_NAME}"
     
     environment {
         JAR_FILE = "java-sample-21-1.0.0.jar"
         APP_PORT = '5000'
     }
     
-    // tools {
-    //     maven 'Maven-3.9.0'
-    //     jdk 'JDK-21'
-    // }
-    
+    tools {
+         maven 'Maven-3.9.0'
+         jdk 'JDK-21'
+     }
+        
     stages {
         stage('Checkout') {
+            echo '🔄 Checking out source code...'
             steps {
-                echo '🔄 Checking out source code...'
-                git branch: 'master', url: 'https://github.com/artisantek/jenkins.git'
+                git url: 'https://github.com/firstcheck-organization/jenkins.git'
             }
         }
-        
-        stage('Test') {
+
+        stage('Unit Tests') {
             steps {
                 echo '🧪 Running unit tests...'
                 dir('javaapp-pipeline') {
@@ -30,7 +32,34 @@ pipeline {
                 }
             }
         }
-        
+
+        stage('Trivy Scan') {
+            steps {
+                echo '🧪 Running Trivy Scan...'
+                dir('javaapp-pipeline') {
+                    sh '''
+                        wget -q https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl -O html.tpl
+                        trivy fs --format template --template "@html.tpl" -o report.html .
+                    '''
+                }
+            }
+        }
+
+        stage('Sonar Analysis') {
+            steps {
+                echo '🧪 Running SonarQube Analysis...'
+                dir('javaapp-pipeline') {
+                    withSonarQubeEnv('sonar') {
+                        sh '''
+                            mvn verify sonar:sonar \
+                            -Dsonar.projectKey=java-app \
+                            -Dsonar.projectName=java-app 
+                        '''
+                    }
+                }
+            }
+        }
+
         stage('Build') {
             steps {
                 echo '🏗️ Building application...'
@@ -42,49 +71,55 @@ pipeline {
                 }
             }
         }
-        
+
+        stage('Publish to Artifactory') {
+            steps {
+                echo '🏗️ Uploading artifactory to JFrog...'
+                dir('javaapp-pipeline/target') {
+                    rtUpload (
+                        serverId: 'jfrog',
+                        spec: '''{
+                            "files": [
+                                {
+                                    "pattern": “java-sample-21-1.0.0.jar ",
+                                    "target": "maven-Bhavya/com/artisantek/java-sample-21/1.0.0/"
+                                }
+                            ]
+                        }'''
+                    )
+                }
+            }
+        }
+    
         stage('Deploy') {
             steps {
                 echo '🚀 Deploying application...'
                 dir('javaapp-pipeline/target') {
-                    script {
-                        // Stop any existing application process
-                        sh '''
-                            echo "🛑 Stopping any existing application processes..."
-                            if pgrep -f "java -jar java-sample-21-1.0.0.jar" > /dev/null; then
-                                pkill -f "java -jar java-sample-21-1.0.0.jar"
-                                echo "App was running and has been killed."
-                            else
-                                echo "App is not running."
-                            fi
-                        '''
-                        
-                        // Deploy the new application
-                        sh '''
-                            # Set JENKINS_NODE_COOKIE to prevent Jenkins from killing the process
-                            export JENKINS_NODE_COOKIE=dontKillMe
-                            
-                            # Start the application in background
-                            echo "Starting application on port ${APP_PORT}..."
-                            nohup java -jar "${JAR_FILE}" > application.log 2>&1 &
-                        '''
-                    }
+                    sh '''
+                        echo "🛑 Stopping any existing application processes..."
+                        if pgrep -f "java -jar java-sample-21-1.0.0.jar" > /dev/null; then
+                            pkill -f "java -jar java-sample-21-1.0.0.jar"
+                            echo "App was running and has been killed."
+                        else
+                            echo "App is not running."
+                        fi
+                        JENKINS_NODE_COOKIE=dontKillMe nohup java -jar java-sample-21-1.0.0.jar > app.log 2>&1 &
+                    '''
                 }
             }
         }
     }
-    
     post {
-        always {
-            cleanWs()
-        }
+        //always {
+        //    cleanWs()
+        //}
         success {
             echo '🎉 Pipeline completed successfully!'
         }
         failure {
             emailext subject: "Pipeline Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
                      body: "Build failed. Please check the logs at ${env.BUILD_URL}",
-                     to: "artisantek.adithya@gmail.com"
+                     to: "bhavyags007@gmail.com"
         }
     }
-} 
+}
