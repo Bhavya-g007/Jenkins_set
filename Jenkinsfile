@@ -1,18 +1,7 @@
 pipeline {
     agent any
-
-    echo "Running on branch: ${env.BRANCH_NAME}"
     
-    environment {
-        JAR_FILE = "java-sample-21-1.0.0.jar"
-        APP_PORT = '5000'
-    }
-    
-    tools {
-         maven 'Maven-3.9.0'
-         jdk 'JDK-21'
-     }
-        
+ 
     stages {
         stage('Checkout') {
             echo '🔄 Checking out source code...'
@@ -113,19 +102,6 @@ pipeline {
                     '''
                 }
             }
-        }
-    }
-    post {
-        //always {
-        //    cleanWs()
-        //}
-        success {
-            echo '🎉 Pipeline completed successfully!'
-        }
-        failure {
-            emailext subject: "Pipeline Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                     body: "Build failed. Please check the logs at ${env.BUILD_URL}",
-                     to: "bhavyags007@gmail.com"
         }
     }
 }
